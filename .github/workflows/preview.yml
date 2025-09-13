@@ -15,14 +15,6 @@ on:
 permissions:
   contents: read
   packages: write
-
-env:
-  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/yudao-web
-  K8S_NAMESPACE: ns-xxxxxx # 你的命名空间
-  K8S_DEPLOY: yudao-web # 前端 Deployment 名
-  K8S_CONTAINER: web # Deployment 中容器名
-  FRONTEND_API_BASE: ${{ secrets.FRONTEND_API_BASE }} # 可选：覆盖 VITE_BASE_URL
-
 jobs:
   build-image:
     runs-on: ubuntu-latest
