@@ -45,33 +45,21 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/yudao-web:latest
+            ${{ secrets.DOCKER_USERNAME }}/yudao-web:${{ github.sha }}
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            VITE_BASE_URL=${{ env.FRONTEND_API_BASE }}
-            BUILD_SCRIPT=build:dev
-          tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
-
   deploy:
     needs: build-image
     runs-on: ubuntu-latest
-    concurrency:
-      group: frontend-prod
-      cancel-in-progress: true
+    if: github.repository == 'karekin/yudao-ui-admin-vue3'
     steps:
-      - name: Set image to this commit (immutable tag)
-        uses: actions-hub/kubectl@master
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - uses: actions-hub/kubectl@master
         env:
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         with:
-          args: -n ${{ env.K8S_NAMESPACE }} set image deployment/${{ env.K8S_DEPLOY }} ${{ env.K8S_CONTAINER }}=${{ env.IMAGE_NAME }}:${{ github.sha }}
-
-      - name: Wait for rollout
-        uses: actions-hub/kubectl@master
-        env:
-          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
-        with:
-          args: -n ${{ env.K8S_NAMESPACE }} rollout status deployment/${{ env.K8S_DEPLOY }} --timeout=180s
+          args: rollout restart deployment yudao-web
