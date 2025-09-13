@@ -1,0 +1,78 @@
+name: Build & Deploy Frontend (amd64)
+
+on:
+  push:
+    branches: [develop] # 改成你的主分支
+    paths:
+      - 'yudao-ui-admin-vue3/**' # 前端目录（如不同，请改）
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  FRONTEND_DIR: yudao-ui-admin-vue3 # 前端目录
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/yudao-ui-admin-vue3
+  K8S_NAMESPACE: ns-xxxxxx # 你的命名空间
+  K8S_DEPLOY: yudao-web # 前端 Deployment 名
+  K8S_CONTAINER: web # Deployment 中容器名
+  FRONTEND_API_BASE: ${{ secrets.FRONTEND_API_BASE }} # 可选：覆盖 VITE_BASE_URL
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Push (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.FRONTEND_DIR }}
+          file: ${{ env.FRONTEND_DIR }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VITE_BASE_URL=${{ env.FRONTEND_API_BASE }}
+            BUILD_SCRIPT=build:dev
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    needs: build-image
+    runs-on: ubuntu-latest
+    concurrency:
+      group: frontend-prod
+      cancel-in-progress: true
+    steps:
+      - name: Set image to this commit (immutable tag)
+        uses: actions-hub/kubectl@master
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        with:
+          args: >
+            -n ${{ env.K8S_NAMESPACE }} set image deployment/${{ env.K8S_DEPLOY }} ${{ env.K8S_CONTAINER }}=${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+
+      - name: Wait for rollout
+        uses: actions-hub/kubectl@master
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        with:
+          args: >
+            -n ${{ env.K8S_NAMESPACE }} rollout status deployment/${{ env.K8S_DEPLOY }} --timeout=180s
+
